@@ -1,0 +1,6 @@
+{
+  "persona": "engineer",
+  "goal": "Schreibe eine Python-Funktion zur Bereinigung von Vorlesungsnotizen.",
+  "requirements": "Python 3.11, snake_case, kleine Funktionen, pytest-Tests.",
+  "scenario": "Die Funktion wird in einer Lern-App vor dem Senden an ein LLM verwendet."
+}

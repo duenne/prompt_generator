@@ -1,0 +1,6 @@
+{
+  "persona": "tester",
+  "goal": "Analysiere generierten Python-Code für einen Markdown-Validator.",
+  "requirements": "Nenne Risiken, Randfälle und Verbesserungsvorschläge.",
+  "scenario": "Der Code stammt aus einem Engineer-Prompt und soll vor der Integration geprüft werden."
+}
