@@ -10,10 +10,25 @@ GENERATED_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "generated_prom
 @dataclass
 class PromptRequest:
     persona_name: str
+    target_key: str
     goal: str
     requirements: str
     scenario: str
 
+
+TARGET_LABELS = {
+    "tutor": {
+        "explain_concept": "Explain concept",
+    },
+    "engineer": {
+        "create_new_feature": "Create new feature",
+        "refactor_code": "Refactor existing code",
+        "explain_code": "Explain code",
+    },
+    "tester": {
+        "review_code": "Review code",
+    },
+}
 
 PERSONA_FILE_MAP = {
     "tutor": PROMPTS_DIR / "system" / "persona_tutor.md",
@@ -22,9 +37,17 @@ PERSONA_FILE_MAP = {
 }
 
 TASK_FILE_MAP = {
-    "tutor": PROMPTS_DIR / "tasks" / "explain_concept_v1.md",
-    "engineer": PROMPTS_DIR / "tasks" / "generate_python_code_v1.md",
-    "tester": PROMPTS_DIR / "tasks" / "review_code_v1.md",
+    "tutor": {
+        "explain_concept": PROMPTS_DIR / "tasks" / "explain_concept_v1.md",
+    },
+    "engineer": {
+        "create_new_feature": PROMPTS_DIR / "tasks" / "engineer_prompt_create_feature_v1.md",
+        "refactor_code": PROMPTS_DIR / "tasks" / "engineer_prompt_refactor_code_v1.md",
+        "explain_code": PROMPTS_DIR / "tasks" / "engineer_prompt_explain_code_v1.md",
+    },
+    "tester": {
+        "review_code": PROMPTS_DIR / "tasks" / "review_code_v1.md",
+    },
 }
 
 SHARED_FILES = [
@@ -44,10 +67,21 @@ def load_persona(persona_name: str) -> str:
     return load_text_file(PERSONA_FILE_MAP[persona_name])
 
 
-def load_task_template(persona_name: str) -> str:
+def get_target_options(persona_name: str) -> dict[str, str]:
+    if persona_name not in TARGET_LABELS:
+        raise ValueError(f"Unbekannte Persona: {persona_name}")
+    return TARGET_LABELS[persona_name]
+
+
+def load_task_template(persona_name: str, target_key: str) -> str:
     if persona_name not in TASK_FILE_MAP:
         raise ValueError(f"Keine Task-Datei für Persona: {persona_name}")
-    return load_text_file(TASK_FILE_MAP[persona_name])
+    persona_tasks = TASK_FILE_MAP[persona_name]
+    if target_key not in persona_tasks:
+        raise ValueError(
+            f"Unbekanntes Ziel '{target_key}' für Persona: {persona_name}"
+        )
+    return load_text_file(persona_tasks[target_key])
 
 
 def load_shared_rules(persona_name: str) -> list[str]:
@@ -59,14 +93,18 @@ def load_shared_rules(persona_name: str) -> list[str]:
 
 def build_prompt(request: PromptRequest) -> str:
     persona_text = load_persona(request.persona_name)
-    task_text = load_task_template(request.persona_name)
+    task_text = load_task_template(request.persona_name, request.target_key)
     shared_rules = load_shared_rules(request.persona_name)
+    target_label = get_target_options(request.persona_name).get(
+        request.target_key, request.target_key
+    )
 
     sections = [
         persona_text,
         task_text,
         *shared_rules,
         "Konkrete Anfrage:",
+        f"Zieltyp: {target_label}",
         f"Ziel: {request.goal}",
         f"Anforderungen: {request.requirements}",
         f"Szenario: {request.scenario}",

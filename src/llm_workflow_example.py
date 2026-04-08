@@ -14,6 +14,7 @@ def save_generated_output(output_text: str, file_name: str, directory_name: str)
 def example_engineer_workflow() -> None:
     request = PromptRequest(
         persona_name="engineer",
+        target_key="create_new_feature",
         goal="Schreibe eine Python-Funktion zur Bereinigung von Vorlesungsnotizen.",
         requirements="Python 3.11, snake_case, kleine Funktionen, Standardbibliothek, pytest-Tests.",
         scenario="Die Funktion wird in einer lokalen Lern-App eingesetzt, um Rohtext vor dem Zusammenfassen zu normalisieren.",

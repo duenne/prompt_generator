@@ -1,6 +1,11 @@
 import streamlit as st
 
-from prompt_generator import PromptRequest, build_prompt, save_generated_prompt
+from prompt_generator import (
+    PromptRequest,
+    build_prompt,
+    get_target_options,
+    save_generated_prompt,
+)
 
 
 st.set_page_config(page_title="Prompt-Generator", layout="centered")
@@ -13,6 +18,14 @@ st.write(
 persona_name = st.selectbox(
     "Persona auswählen",
     options=["tutor", "engineer", "tester"],
+)
+
+target_options = get_target_options(persona_name)
+
+target_key = st.selectbox(
+    "Zieltyp auswählen",
+    options=list(target_options.keys()),
+    format_func=lambda key: target_options[key],
 )
 
 goal = st.text_input(
@@ -34,12 +47,13 @@ scenario = st.text_area(
 
 filename = st.text_input(
     "Dateiname für den generierten Prompt",
-    value=f"{persona_name}_prompt_v1.md",
+    value=f"{persona_name}_{target_key}_prompt_v1.md",
 )
 
 if st.button("Prompt generieren"):
     request = PromptRequest(
         persona_name=persona_name,
+        target_key=target_key,
         goal=goal.strip(),
         requirements=requirements.strip(),
         scenario=scenario.strip(),
