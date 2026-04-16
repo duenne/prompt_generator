@@ -11,10 +11,22 @@ GENERATED_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "generated_prom
 class PromptRequest:
     persona_name: str
     target_key: str
-    goal: str
-    requirements: str
-    scenario: str
     prompt_type: str = "llm"
+    goal: str = ""
+    requirements: str = ""
+    scenario: str = ""
+    llm_role: str = ""
+    llm_context: str = ""
+    llm_task: str = ""
+    llm_requirements: str = ""
+    llm_output_format: str = ""
+    llm_examples: str = ""
+    agent_goal: str = ""
+    agent_context: str = ""
+    agent_constraints: str = ""
+    agent_workflow: str = ""
+    agent_verification: str = ""
+    agent_done_when: str = ""
 
 
 @dataclass
@@ -116,7 +128,9 @@ def build_prompt(request: PromptRequest) -> str:
 
     sections = [persona_text, task_text, *shared_rules, request_block]
 
-    return "\n\n".join(section.strip() for section in sections if section and section.strip())
+    return "\n\n".join(
+        section.strip() for section in sections if section and section.strip()
+    )
 
 
 def evaluate_prompt_quality(request: PromptRequest) -> QualityCheckResult:
@@ -134,55 +148,84 @@ def save_generated_prompt(prompt_text: str, filename: str) -> Path:
 
 
 def _build_llm_request_block(request: PromptRequest, target_label: str) -> str:
-    output_format = _extract_output_format(request.requirements)
+    role = request.llm_role.strip() or request.persona_name
+    context = request.llm_context.strip() or request.scenario.strip() or "Nicht angegeben."
+    task = request.llm_task.strip() or request.goal.strip() or "Nicht angegeben."
+    requirements = (
+        request.llm_requirements.strip()
+        or request.requirements.strip()
+        or "Keine spezifischen Anforderungen angegeben."
+    )
+    output_format = request.llm_output_format.strip() or _extract_output_format(requirements)
+
     sections = [
         "Prompt-Typ: LLM (einmalige Antwort)",
         "Rolle:",
-        f"- Persona: {request.persona_name}",
+        f"- Persona: {role}",
         f"- Zieltyp: {target_label}",
         "Kontext:",
-        request.scenario or "Nicht angegeben.",
+        context,
         "Aufgabe:",
-        request.goal or "Nicht angegeben.",
+        task,
         "Anforderungen:",
-        request.requirements or "Keine spezifischen Anforderungen angegeben.",
+        requirements,
         "Output-Format:",
         output_format,
-        "Meta-Regel: Liefere genau eine strukturierte, abgeschlossene Antwort.",
     ]
+
+    if request.llm_examples.strip():
+        sections.extend(["Beispiele (optional):", request.llm_examples.strip()])
+
+    sections.append(
+        "Meta-Regel: Liefere genau eine strukturierte, abgeschlossene Antwort mit minimaler Ambiguität."
+    )
     return "\n".join(sections)
 
 
 def _build_agent_request_block(request: PromptRequest, target_label: str) -> str:
-    workflow = _derive_agent_workflow(request.goal, target_label)
+    goal = request.agent_goal.strip() or request.goal.strip() or "Nicht angegeben."
+    context = request.agent_context.strip() or request.scenario.strip() or "Nicht angegeben."
+    constraints = (
+        request.agent_constraints.strip()
+        or request.requirements.strip()
+        or "Keine Constraints angegeben."
+    )
+    workflow = request.agent_workflow.strip() or _derive_agent_workflow(goal, target_label)
+    verification = request.agent_verification.strip() or "Keine Verifikation definiert."
+    done_when = request.agent_done_when.strip() or "Kein Abschlusskriterium definiert."
+
     sections = [
         "Prompt-Typ: Agent (iterativer Arbeitsprozess)",
         "Ziel:",
-        request.goal or "Nicht angegeben.",
+        goal,
         "Kontext:",
-        request.scenario or "Nicht angegeben.",
+        context,
         "Constraints:",
-        request.requirements or "Keine Constraints angegeben.",
-        "Arbeitsweise (Schritte / Iteration):",
+        constraints,
+        "Arbeitsweise:",
         workflow,
-        "Output pro Schritt:",
-        "- Schrittziel",
-        "- Ergebnis/Artefakt",
-        "- Kurze Begründung",
-        "- Nächster Schritt",
-        "Meta-Regel: Eine explizite Arbeitsweise mit klaren Schritten ist verpflichtend.",
+        "Verifikation:",
+        verification,
+        "Done when:",
+        done_when,
+        "Meta-Regel: Trenne Planung und Umsetzung explizit und dokumentiere jede Iteration nachvollziehbar.",
     ]
     return "\n".join(sections)
 
 
 def _derive_agent_workflow(goal: str, target_label: str) -> str:
-    if not goal.strip():
-        return "- Schritt 1: Ziel präzisieren.\n- Schritt 2: Lösungsweg definieren.\n- Schritt 3: Ergebnis prüfen."
+    if not goal.strip() or goal.strip() == "Nicht angegeben.":
+        return (
+            "1) Ziel schärfen und Scope bestätigen.\n"
+            "2) Plan mit klaren Schritten erstellen.\n"
+            "3) Umsetzung pro Schritt durchführen.\n"
+            "4) Ergebnis mit Verifikation prüfen."
+        )
     return (
-        f"- Schritt 1: Ziel '{goal.strip()}' in Teilschritte für '{target_label}' zerlegen.\n"
-        "- Schritt 2: Erste Iteration ausführen und Zwischenergebnis dokumentieren.\n"
-        "- Schritt 3: Ergebnis gegen Constraints prüfen und überarbeiten.\n"
-        "- Schritt 4: Finales Ergebnis + offene Risiken ausgeben."
+        f"1) Analysiere das Ziel '{goal.strip()}' für '{target_label}'.\n"
+        "2) Erstelle einen Plan mit nachvollziehbaren Teilschritten.\n"
+        "3) Setze die Teilschritte nacheinander um und dokumentiere Entscheidungen.\n"
+        "4) Verifiziere das Ergebnis und liefere offene Risiken + nächste Schritte."
     )
 
 
@@ -194,74 +237,131 @@ def _extract_output_format(requirements: str) -> str:
     return "Bitte als klar gegliederte Markdown-Antwort ausgeben."
 
 
+def _is_general_requirement_text(text: str) -> bool:
+    normalized = text.lower().strip()
+    if not normalized:
+        return True
+    generic_terms = ["gut", "präzise", "klar", "hochwertig", "sauber", "professionell"]
+    token_count = len([token for token in normalized.split() if token])
+    if token_count < 4:
+        return True
+    return all(term in normalized for term in generic_terms[:2])
+
+
+def _is_vague_goal(goal: str) -> bool:
+    normalized = goal.lower().strip()
+    if len(normalized) < 20:
+        return True
+    vague_patterns = ["verbessern", "optimieren", "fixen", "anpassen", "etwas"]
+    return any(pattern in normalized for pattern in vague_patterns) and len(normalized) < 45
+
+
 def _evaluate_llm_prompt_quality(request: PromptRequest) -> QualityCheckResult:
     feedback: list[str] = []
     score = 0
-    max_score = 3
+    max_score = 4
 
-    if request.goal.strip():
+    task = request.llm_task.strip() or request.goal.strip()
+    context = request.llm_context.strip() or request.scenario.strip()
+    output_format = request.llm_output_format.strip()
+    requirements = request.llm_requirements.strip() or request.requirements.strip()
+
+    if task:
         score += 1
-        feedback.append("🟢 Ziel vorhanden.")
+        feedback.append("🟢 Aufgabe vorhanden.")
     else:
-        feedback.append("🔴 Kritisch: Ziel fehlt.")
+        feedback.append("🟠 Warnung: Aufgabe fehlt.")
 
-    requirement_text = request.requirements.strip()
-    format_keywords = ["format", "json", "markdown", "liste", "tabelle", "struktur"]
-    if any(keyword in requirement_text.lower() for keyword in format_keywords):
+    if len(context) >= 30:
         score += 1
-        feedback.append("🟢 Output-Format erkannt.")
+        feedback.append("🟢 Kontext ausreichend detailliert.")
     else:
-        feedback.append("🟡 Hinweis: Kein klares Output-Format erkannt.")
+        feedback.append("🟠 Warnung: Kontext ist zu knapp.")
 
-    if len(request.scenario.strip()) >= 20:
+    if output_format:
         score += 1
-        feedback.append("🟢 Kontext ist ausreichend detailliert.")
+        feedback.append("🟢 Output-Format definiert.")
     else:
-        feedback.append("🟡 Hinweis: Kontext ist sehr kurz.")
+        feedback.append("🔵 Hinweis: Kein Output-Format definiert.")
 
-    if not request.goal.strip():
-        suggestion = "Präzisiere das Ziel mit einem gewünschten Ergebnis und Erfolgskriterium."
-    elif not any(keyword in requirement_text.lower() for keyword in format_keywords):
-        suggestion = "Füge ein konkretes Output-Format hinzu (z. B. Markdown-Liste oder JSON-Schema)."
+    if requirements and not _is_general_requirement_text(requirements):
+        score += 1
+        feedback.append("🟢 Anforderungen sind konkret genug.")
     else:
-        suggestion = "Erweitere den Kontext um Zielgruppe oder Einsatzsituation für präzisere Antworten."
+        feedback.append("🔵 Hinweis: Anforderungen sind noch sehr allgemein formuliert.")
+
+    if not task:
+        suggestion = "Beschreibe die Aufgabe als konkrete Aktion mit erwartbarem Ergebnis."
+    elif len(context) < 30:
+        suggestion = "Ergänze den Kontext um Zielgruppe, Einsatzort oder relevante Randbedingungen."
+    elif not output_format:
+        suggestion = "Definiere ein explizites Ausgabeformat (z. B. Markdown-Gliederung oder JSON-Schema)."
+    else:
+        suggestion = "Verfeinere die Anforderungen mit fachlichen Details oder Qualitätskriterien."
 
     return QualityCheckResult(
-        score=score, max_score=max_score, feedback=feedback, suggestion=suggestion
+        score=score,
+        max_score=max_score,
+        feedback=feedback,
+        suggestion=suggestion,
     )
 
 
 def _evaluate_agent_prompt_quality(request: PromptRequest) -> QualityCheckResult:
     feedback: list[str] = []
     score = 0
-    max_score = 3
+    max_score = 5
 
-    workflow = _derive_agent_workflow(request.goal, request.target_key).strip()
-    if workflow:
-        score += 1
-        feedback.append("🟢 Arbeitsweise (Schritte/Iteration) ist definiert.")
-    else:
-        feedback.append("🔴 Kritisch: Keine Arbeitsweise definiert.")
+    goal = request.agent_goal.strip() or request.goal.strip()
+    constraints = request.agent_constraints.strip() or request.requirements.strip()
+    workflow = request.agent_workflow.strip()
+    verification = request.agent_verification.strip()
+    done_when = request.agent_done_when.strip()
 
-    if request.requirements.strip():
-        score += 1
-        feedback.append("🟢 Constraints sind vorhanden.")
-    else:
-        feedback.append("🟡 Warnung: Keine Constraints angegeben.")
-
-    if len(request.goal.strip()) >= 20:
+    if goal and not _is_vague_goal(goal):
         score += 1
         feedback.append("🟢 Ziel ist präzise genug.")
     else:
-        feedback.append("🟡 Warnung: Ziel ist noch vage.")
+        feedback.append("🔴 Fehler: Ziel ist zu vage.")
 
-    if not request.requirements.strip():
-        suggestion = "Ergänze klare Constraints (z. B. Technologien, Grenzen, Qualitätskriterien)."
-    elif len(request.goal.strip()) < 20:
-        suggestion = "Präzisiere das Ziel mit messbaren Ergebnissen statt allgemeiner Formulierungen."
+    if constraints:
+        score += 1
+        feedback.append("🟢 Constraints vorhanden.")
     else:
-        suggestion = "Definiere für jeden Schritt ein Prüfkriterium, um Iterationen gezielt zu steuern."
+        feedback.append("🟠 Warnung: Keine Constraints angegeben.")
+
+    if workflow:
+        score += 1
+        feedback.append("🟢 Arbeitsweise beschrieben.")
+    else:
+        feedback.append("🔴 Fehler: Keine Arbeitsweise beschrieben.")
+
+    if verification:
+        score += 1
+        feedback.append("🟢 Verifikation vorhanden.")
+    else:
+        feedback.append("🔴 Fehler: Keine Verifikation vorhanden.")
+
+    if done_when:
+        score += 1
+        feedback.append("🟢 Abschlusskriterium definiert.")
+    else:
+        feedback.append("🟠 Warnung: Kein klares Abschlusskriterium definiert.")
+
+    if not goal or _is_vague_goal(goal):
+        suggestion = "Formuliere das Ziel messbar (konkrete Änderung + erwartetes Ergebnis)."
+    elif not workflow:
+        suggestion = "Beschreibe eine klare Arbeitsweise (Analyse → Plan → Umsetzung → Review)."
+    elif not verification:
+        suggestion = "Ergänze konkrete Verifikation, z. B. Tests, manuelle Checks oder reproduzierbare Schritte."
+    elif not done_when:
+        suggestion = "Definiere ein Done-When mit eindeutigem Abschlusskriterium."
+    else:
+        suggestion = "Ergänze constraints-nahe Prüfschritte pro Iteration, damit das Ergebnis nachvollziehbar bleibt."
 
     return QualityCheckResult(
-        score=score, max_score=max_score, feedback=feedback, suggestion=suggestion
+        score=score,
+        max_score=max_score,
+        feedback=feedback,
+        suggestion=suggestion,
     )
