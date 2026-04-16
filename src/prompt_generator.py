@@ -26,7 +26,6 @@ class PromptRequest:
     agent_constraints: str = ""
     agent_workflow: str = ""
     agent_verification: str = ""
-    agent_done_when: str = ""
 
 
 @dataclass
@@ -161,8 +160,8 @@ def _build_llm_request_block(request: PromptRequest, target_label: str) -> str:
     sections = [
         "Prompt-Typ: LLM (einmalige Antwort)",
         "Rolle:",
-        f"- Persona: {role}",
-        f"- Zieltyp: {target_label}",
+        role,
+        f"Zieltyp: {target_label}",
         "Kontext:",
         context,
         "Aufgabe:",
@@ -192,7 +191,6 @@ def _build_agent_request_block(request: PromptRequest, target_label: str) -> str
     )
     workflow = request.agent_workflow.strip() or _derive_agent_workflow(goal, target_label)
     verification = request.agent_verification.strip() or "Keine Verifikation definiert."
-    done_when = request.agent_done_when.strip() or "Kein Abschlusskriterium definiert."
 
     sections = [
         "Prompt-Typ: Agent (iterativer Arbeitsprozess)",
@@ -206,8 +204,6 @@ def _build_agent_request_block(request: PromptRequest, target_label: str) -> str
         workflow,
         "Verifikation:",
         verification,
-        "Done when:",
-        done_when,
         "Meta-Regel: Trenne Planung und Umsetzung explizit und dokumentiere jede Iteration nachvollziehbar.",
     ]
     return "\n".join(sections)
@@ -310,13 +306,12 @@ def _evaluate_llm_prompt_quality(request: PromptRequest) -> QualityCheckResult:
 def _evaluate_agent_prompt_quality(request: PromptRequest) -> QualityCheckResult:
     feedback: list[str] = []
     score = 0
-    max_score = 5
+    max_score = 4
 
     goal = request.agent_goal.strip() or request.goal.strip()
     constraints = request.agent_constraints.strip() or request.requirements.strip()
     workflow = request.agent_workflow.strip()
     verification = request.agent_verification.strip()
-    done_when = request.agent_done_when.strip()
 
     if goal and not _is_vague_goal(goal):
         score += 1
@@ -342,20 +337,12 @@ def _evaluate_agent_prompt_quality(request: PromptRequest) -> QualityCheckResult
     else:
         feedback.append("🔴 Fehler: Keine Verifikation vorhanden.")
 
-    if done_when:
-        score += 1
-        feedback.append("🟢 Abschlusskriterium definiert.")
-    else:
-        feedback.append("🟠 Warnung: Kein klares Abschlusskriterium definiert.")
-
     if not goal or _is_vague_goal(goal):
         suggestion = "Formuliere das Ziel messbar (konkrete Änderung + erwartetes Ergebnis)."
     elif not workflow:
         suggestion = "Beschreibe eine klare Arbeitsweise (Analyse → Plan → Umsetzung → Review)."
     elif not verification:
         suggestion = "Ergänze konkrete Verifikation, z. B. Tests, manuelle Checks oder reproduzierbare Schritte."
-    elif not done_when:
-        suggestion = "Definiere ein Done-When mit eindeutigem Abschlusskriterium."
     else:
         suggestion = "Ergänze constraints-nahe Prüfschritte pro Iteration, damit das Ergebnis nachvollziehbar bleibt."
 
