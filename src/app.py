@@ -21,6 +21,11 @@ persona_name = st.selectbox(
     options=["tutor", "engineer", "tester"],
 )
 
+prompt_type = st.selectbox(
+    "Prompt-Typ",
+    options=["LLM", "Agent"],
+)
+
 target_options = get_target_options(persona_name)
 
 target_key = st.selectbox(
@@ -57,6 +62,7 @@ quality_request = PromptRequest(
     goal=goal.strip(),
     requirements=requirements.strip(),
     scenario=scenario.strip(),
+    prompt_type=prompt_type.lower(),
 )
 quality_result = evaluate_prompt_quality(quality_request)
 st.subheader("Qualitätscheck (live)")
@@ -64,11 +70,15 @@ st.progress(quality_result.score / quality_result.max_score)
 st.caption(f"Qualitätsscore: {quality_result.score}/{quality_result.max_score}")
 for item in quality_result.feedback:
     st.write(item)
+st.info(f"Verbesserungsvorschlag: {quality_result.suggestion}")
+
+st.subheader("Live-Vorschau")
+preview_prompt = build_prompt(quality_request)
+st.code(preview_prompt, language="markdown")
 
 if st.button("Prompt generieren"):
-    prompt_text = build_prompt(quality_request)
-    output_path = save_generated_prompt(prompt_text, filename)
+    output_path = save_generated_prompt(preview_prompt, filename)
 
     st.subheader("Generierter Prompt")
-    st.code(prompt_text, language="markdown")
+    st.code(preview_prompt, language="markdown")
     st.success(f"Prompt gespeichert unter: {output_path}")
