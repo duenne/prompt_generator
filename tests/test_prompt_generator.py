@@ -1,6 +1,7 @@
 from prompt_generator import (
     PromptRequest,
     build_prompt,
+    evaluate_prompt_quality,
     get_target_options,
     load_shared_rules,
 )
@@ -40,3 +41,36 @@ def test_engineer_prompt_includes_coding_rules() -> None:
     joined_rules = "\n".join(shared_rules)
     assert "Python 3.11" in joined_rules
     assert "pytest-Tests" in joined_rules
+
+
+def test_evaluate_prompt_quality_detects_missing_details() -> None:
+    request = PromptRequest(
+        persona_name="tutor",
+        target_key="explain_concept",
+        goal="Rekursion",
+        requirements="",
+        scenario="Kurz",
+    )
+
+    result = evaluate_prompt_quality(request)
+
+    assert result.score == 0
+    assert result.max_score == 4
+    assert any("Ziel ist noch unklar" in item for item in result.feedback)
+    assert any("Anforderungen fehlen" in item for item in result.feedback)
+    assert any("Kein klares Output-Format erkannt" in item for item in result.feedback)
+
+
+def test_evaluate_prompt_quality_rewards_structured_input() -> None:
+    request = PromptRequest(
+        persona_name="engineer",
+        target_key="create_new_feature",
+        goal="Erstelle eine Funktion, die Vorlesungsnotizen bereinigt und Überschriften extrahiert.",
+        requirements="Bitte als Markdown-Liste mit JSON-Beispiel ausgeben.",
+        scenario="Die Ausgabe wird in einer Lern-App für Erstsemester angezeigt.",
+    )
+
+    result = evaluate_prompt_quality(request)
+
+    assert result.score == 4
+    assert result.max_score == 4
