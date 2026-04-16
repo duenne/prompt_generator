@@ -14,6 +14,7 @@ class PromptRequest:
     goal: str
     requirements: str
     scenario: str
+    prompt_type: str = "llm"
 
 
 @dataclass
@@ -21,6 +22,7 @@ class QualityCheckResult:
     score: int
     max_score: int
     feedback: list[str]
+    suggestion: str
 
 
 TARGET_LABELS = {
@@ -106,52 +108,22 @@ def build_prompt(request: PromptRequest) -> str:
         request.target_key, request.target_key
     )
 
-    sections = [
-        persona_text,
-        task_text,
-        *shared_rules,
-        "Konkrete Anfrage:",
-        f"Zieltyp: {target_label}",
-        f"Ziel: {request.goal}",
-        f"Anforderungen: {request.requirements}",
-        f"Szenario: {request.scenario}",
-    ]
+    normalized_prompt_type = request.prompt_type.lower().strip()
+    if normalized_prompt_type == "agent":
+        request_block = _build_agent_request_block(request, target_label)
+    else:
+        request_block = _build_llm_request_block(request, target_label)
+
+    sections = [persona_text, task_text, *shared_rules, request_block]
 
     return "\n\n".join(section.strip() for section in sections if section and section.strip())
 
 
 def evaluate_prompt_quality(request: PromptRequest) -> QualityCheckResult:
-    feedback: list[str] = []
-    score = 0
-    max_score = 4
-
-    if len(request.goal.strip()) >= 20:
-        score += 1
-        feedback.append("✅ Ziel ist konkret genug beschrieben.")
-    else:
-        feedback.append("⚠️ Ziel ist noch unklar. Beschreibe den gewünschten Output konkreter.")
-
-    requirement_text = request.requirements.strip()
-    if requirement_text:
-        score += 1
-        feedback.append("✅ Anforderungen sind vorhanden.")
-    else:
-        feedback.append("⚠️ Anforderungen fehlen. Nenne z. B. Ton, Tiefe oder technische Grenzen.")
-
-    format_keywords = ["format", "json", "markdown", "liste", "tabelle", "struktur"]
-    if any(keyword in requirement_text.lower() for keyword in format_keywords):
-        score += 1
-        feedback.append("✅ Output-Format ist angedeutet.")
-    else:
-        feedback.append("⚠️ Kein klares Output-Format erkannt (z. B. 'als Markdown-Liste').")
-
-    if len(request.scenario.strip()) >= 20:
-        score += 1
-        feedback.append("✅ Szenario gibt dem Modell hilfreichen Kontext.")
-    else:
-        feedback.append("⚠️ Szenario ist sehr knapp. Ergänze Zielgruppe oder Nutzungskontext.")
-
-    return QualityCheckResult(score=score, max_score=max_score, feedback=feedback)
+    normalized_prompt_type = request.prompt_type.lower().strip()
+    if normalized_prompt_type == "agent":
+        return _evaluate_agent_prompt_quality(request)
+    return _evaluate_llm_prompt_quality(request)
 
 
 def save_generated_prompt(prompt_text: str, filename: str) -> Path:
@@ -159,3 +131,137 @@ def save_generated_prompt(prompt_text: str, filename: str) -> Path:
     output_path = GENERATED_PROMPTS_DIR / filename
     output_path.write_text(prompt_text, encoding="utf-8")
     return output_path
+
+
+def _build_llm_request_block(request: PromptRequest, target_label: str) -> str:
+    output_format = _extract_output_format(request.requirements)
+    sections = [
+        "Prompt-Typ: LLM (einmalige Antwort)",
+        "Rolle:",
+        f"- Persona: {request.persona_name}",
+        f"- Zieltyp: {target_label}",
+        "Kontext:",
+        request.scenario or "Nicht angegeben.",
+        "Aufgabe:",
+        request.goal or "Nicht angegeben.",
+        "Anforderungen:",
+        request.requirements or "Keine spezifischen Anforderungen angegeben.",
+        "Output-Format:",
+        output_format,
+        "Meta-Regel: Liefere genau eine strukturierte, abgeschlossene Antwort.",
+    ]
+    return "\n".join(sections)
+
+
+def _build_agent_request_block(request: PromptRequest, target_label: str) -> str:
+    workflow = _derive_agent_workflow(request.goal, target_label)
+    sections = [
+        "Prompt-Typ: Agent (iterativer Arbeitsprozess)",
+        "Ziel:",
+        request.goal or "Nicht angegeben.",
+        "Kontext:",
+        request.scenario or "Nicht angegeben.",
+        "Constraints:",
+        request.requirements or "Keine Constraints angegeben.",
+        "Arbeitsweise (Schritte / Iteration):",
+        workflow,
+        "Output pro Schritt:",
+        "- Schrittziel",
+        "- Ergebnis/Artefakt",
+        "- Kurze Begründung",
+        "- Nächster Schritt",
+        "Meta-Regel: Eine explizite Arbeitsweise mit klaren Schritten ist verpflichtend.",
+    ]
+    return "\n".join(sections)
+
+
+def _derive_agent_workflow(goal: str, target_label: str) -> str:
+    if not goal.strip():
+        return "- Schritt 1: Ziel präzisieren.\n- Schritt 2: Lösungsweg definieren.\n- Schritt 3: Ergebnis prüfen."
+    return (
+        f"- Schritt 1: Ziel '{goal.strip()}' in Teilschritte für '{target_label}' zerlegen.\n"
+        "- Schritt 2: Erste Iteration ausführen und Zwischenergebnis dokumentieren.\n"
+        "- Schritt 3: Ergebnis gegen Constraints prüfen und überarbeiten.\n"
+        "- Schritt 4: Finales Ergebnis + offene Risiken ausgeben."
+    )
+
+
+def _extract_output_format(requirements: str) -> str:
+    normalized_requirements = requirements.lower()
+    format_keywords = ["format", "json", "markdown", "liste", "tabelle", "struktur"]
+    if any(keyword in normalized_requirements for keyword in format_keywords):
+        return requirements
+    return "Bitte als klar gegliederte Markdown-Antwort ausgeben."
+
+
+def _evaluate_llm_prompt_quality(request: PromptRequest) -> QualityCheckResult:
+    feedback: list[str] = []
+    score = 0
+    max_score = 3
+
+    if request.goal.strip():
+        score += 1
+        feedback.append("🟢 Ziel vorhanden.")
+    else:
+        feedback.append("🔴 Kritisch: Ziel fehlt.")
+
+    requirement_text = request.requirements.strip()
+    format_keywords = ["format", "json", "markdown", "liste", "tabelle", "struktur"]
+    if any(keyword in requirement_text.lower() for keyword in format_keywords):
+        score += 1
+        feedback.append("🟢 Output-Format erkannt.")
+    else:
+        feedback.append("🟡 Hinweis: Kein klares Output-Format erkannt.")
+
+    if len(request.scenario.strip()) >= 20:
+        score += 1
+        feedback.append("🟢 Kontext ist ausreichend detailliert.")
+    else:
+        feedback.append("🟡 Hinweis: Kontext ist sehr kurz.")
+
+    if not request.goal.strip():
+        suggestion = "Präzisiere das Ziel mit einem gewünschten Ergebnis und Erfolgskriterium."
+    elif not any(keyword in requirement_text.lower() for keyword in format_keywords):
+        suggestion = "Füge ein konkretes Output-Format hinzu (z. B. Markdown-Liste oder JSON-Schema)."
+    else:
+        suggestion = "Erweitere den Kontext um Zielgruppe oder Einsatzsituation für präzisere Antworten."
+
+    return QualityCheckResult(
+        score=score, max_score=max_score, feedback=feedback, suggestion=suggestion
+    )
+
+
+def _evaluate_agent_prompt_quality(request: PromptRequest) -> QualityCheckResult:
+    feedback: list[str] = []
+    score = 0
+    max_score = 3
+
+    workflow = _derive_agent_workflow(request.goal, request.target_key).strip()
+    if workflow:
+        score += 1
+        feedback.append("🟢 Arbeitsweise (Schritte/Iteration) ist definiert.")
+    else:
+        feedback.append("🔴 Kritisch: Keine Arbeitsweise definiert.")
+
+    if request.requirements.strip():
+        score += 1
+        feedback.append("🟢 Constraints sind vorhanden.")
+    else:
+        feedback.append("🟡 Warnung: Keine Constraints angegeben.")
+
+    if len(request.goal.strip()) >= 20:
+        score += 1
+        feedback.append("🟢 Ziel ist präzise genug.")
+    else:
+        feedback.append("🟡 Warnung: Ziel ist noch vage.")
+
+    if not request.requirements.strip():
+        suggestion = "Ergänze klare Constraints (z. B. Technologien, Grenzen, Qualitätskriterien)."
+    elif len(request.goal.strip()) < 20:
+        suggestion = "Präzisiere das Ziel mit messbaren Ergebnissen statt allgemeiner Formulierungen."
+    else:
+        suggestion = "Definiere für jeden Schritt ein Prüfkriterium, um Iterationen gezielt zu steuern."
+
+    return QualityCheckResult(
+        score=score, max_score=max_score, feedback=feedback, suggestion=suggestion
+    )
