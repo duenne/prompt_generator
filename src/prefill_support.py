@@ -87,11 +87,10 @@ def _extract_prompt_fields(prompt_text: str) -> dict[str, str]:
             "agent_context": _extract_between(prompt_text, "Kontext:\n", "\nConstraints:"),
             "agent_constraints": _extract_between(prompt_text, "Constraints:\n", "\nArbeitsweise:"),
             "agent_workflow": _extract_between(prompt_text, "Arbeitsweise:\n", "\nVerifikation:"),
-            "agent_verification": _extract_between(prompt_text, "Verifikation:\n", "\nDone when:"),
-            "agent_done_when": _extract_between(prompt_text, "Done when:\n", "\nMeta-Regel:"),
+            "agent_verification": _extract_between(prompt_text, "Verifikation:\n", "\nMeta-Regel:"),
         }
 
-    role_match = re.search(r"- Persona:\s*(.+)", prompt_text)
+    role_match = re.search(r"Rolle:\n(.+)", prompt_text)
     return {
         "llm_role": role_match.group(1).strip() if role_match else "",
         "llm_context": _extract_between(prompt_text, "Kontext:\n", "\nAufgabe:"),

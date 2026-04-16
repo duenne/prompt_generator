@@ -9,8 +9,8 @@ def test_get_field_templates_contains_structuring_blocks() -> None:
 def test_extract_prompt_fields_for_llm_prompt() -> None:
     prompt_text = """Prompt-Typ: LLM (einmalige Antwort)
 Rolle:
-- Persona: Präziser Software Engineer
-- Zieltyp: Explain code
+Präziser Software Engineer
+Zieltyp: Explain code
 Kontext:
 Nutze kurze Abschnitte und konkrete Beispiele.
 Aufgabe:
@@ -41,8 +41,6 @@ Arbeitsweise:
 Zuerst analysieren, dann planen, dann minimal umsetzen.
 Verifikation:
 Zeige vorher/nachher Verhalten.
-Done when:
-Die UI-Änderung ist sichtbar und verständlich.
 Meta-Regel: Trenne Planung und Umsetzung explizit und dokumentiere jede Iteration nachvollziehbar.
 """
 

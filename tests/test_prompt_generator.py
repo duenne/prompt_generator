@@ -22,7 +22,7 @@ def test_build_llm_prompt_contains_structured_sections() -> None:
     prompt_text = build_prompt(request)
 
     assert "Prompt-Typ: LLM (einmalige Antwort)" in prompt_text
-    assert "- Persona: Senior Python Engineer" in prompt_text
+    assert "Rolle:\nSenior Python Engineer" in prompt_text
     assert "Aufgabe:" in prompt_text
     assert "Output-Format:" in prompt_text
     assert "Markdown mit Tabelle" in prompt_text
@@ -95,7 +95,6 @@ def test_build_agent_prompt_uses_agent_structure() -> None:
         agent_constraints="Python 3.11, keine externen APIs.",
         agent_workflow="1) Analyse 2) Plan 3) Umsetzung 4) Review",
         agent_verification="pytest + manueller Smoke-Test",
-        agent_done_when="Alle Tests grün und Pipeline in Doku beschrieben",
     )
 
     prompt_text = build_prompt(request)
@@ -103,7 +102,7 @@ def test_build_agent_prompt_uses_agent_structure() -> None:
     assert "Prompt-Typ: Agent (iterativer Arbeitsprozess)" in prompt_text
     assert "Arbeitsweise:" in prompt_text
     assert "Verifikation:" in prompt_text
-    assert "Done when:" in prompt_text
+    assert "Done when:" not in prompt_text
     assert "Constraints:" in prompt_text
 
 
@@ -116,12 +115,11 @@ def test_evaluate_agent_prompt_quality_detects_missing_fields() -> None:
         agent_constraints="",
         agent_workflow="",
         agent_verification="",
-        agent_done_when="",
     )
 
     result = evaluate_prompt_quality(request)
 
-    assert result.max_score == 5
+    assert result.max_score == 4
     assert any("Ziel ist zu vage" in item for item in result.feedback)
     assert any("Keine Constraints" in item for item in result.feedback)
     assert any("Keine Arbeitsweise" in item for item in result.feedback)

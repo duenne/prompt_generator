@@ -12,10 +12,8 @@ from prompt_generator import (
 
 st.set_page_config(page_title="Prompt-Generator", layout="centered")
 
-st.title("Prompt-Generator für Tutor, Engineer und Tester")
-st.write(
-    "Erzeuge strukturierte Prompts für eine einmalige LLM-Antwort oder einen planbaren Agent-Workflow."
-)
+st.title("Prompt-Generator")
+st.write("Reduzierte, klare UI mit Startpunkten und Live-Qualitätsfeedback.")
 
 FIELD_SEPARATOR = {
     "llm_role": " | ",
@@ -23,6 +21,55 @@ FIELD_SEPARATOR = {
     "llm_context": "\n",
     "agent_workflow": "\n",
     "agent_verification": "\n",
+}
+
+START_POINTS = {
+    "leer": {
+        "label": "Leer starten",
+        "persona": "engineer",
+        "llm": {},
+        "agent": {},
+    },
+    "tutor": {
+        "label": "Tutor (didaktisch)",
+        "persona": "tutor",
+        "llm": {
+            "llm_role": "Didaktisch starker Tutor",
+            "llm_context": "Für Studierende mit Grundkenntnissen; klare und verständliche Erklärungen.",
+            "llm_requirements": "Klare Struktur, nachvollziehbare Sprache, fachlich korrekt.",
+            "llm_output_format": "Definition, Beispiel, Erklärung",
+        },
+        "agent": {
+            "agent_workflow": "1) Problem didaktisch einordnen 2) Schritte klar strukturieren 3) Lösung iterativ prüfen",
+            "agent_verification": "Verifiziere Verständlichkeit mit konkretem Vorher/Nachher-Beispiel.",
+        },
+    },
+    "engineer": {
+        "label": "Engineer (technisch präzise)",
+        "persona": "engineer",
+        "llm": {
+            "llm_role": "Präziser Software Engineer",
+            "llm_requirements": "klare Struktur, technische Korrektheit",
+            "llm_output_format": "strukturierte Lösung mit Begründung",
+        },
+        "agent": {
+            "agent_workflow": "1) Analyse 2) Plan 3) minimal-invasive Umsetzung 4) Verifikation",
+            "agent_verification": "Prüfe Verhalten mit reproduzierbaren Schritten und Tests.",
+        },
+    },
+    "tester": {
+        "label": "Tester (kritisch, edge-case fokussiert)",
+        "persona": "tester",
+        "llm": {
+            "llm_role": "Kritischer Tester mit Fokus auf Edge Cases",
+            "llm_requirements": "Explizite Annahmen, Risikofokus, Grenzfälle priorisieren.",
+            "llm_output_format": "Risiken, Testfälle, erwartete Ergebnisse",
+        },
+        "agent": {
+            "agent_workflow": "1) Risiken identifizieren 2) kritische Pfade priorisieren 3) edge-case-orientiert prüfen",
+            "agent_verification": "Nutze negative Tests, Edge Cases und klare Reproduktionsschritte.",
+        },
+    },
 }
 
 
@@ -41,6 +88,15 @@ def merge_prefill(field_key: str, incoming_text: str) -> None:
 
     separator = FIELD_SEPARATOR.get(field_key, "\n")
     st.session_state[field_key] = f"{existing}{separator}{incoming}".strip()
+
+
+def apply_start_point(start_key: str, prompt_type: str) -> None:
+    if start_key == "leer":
+        return
+
+    scope = START_POINTS[start_key][prompt_type]
+    for field_key, value in scope.items():
+        st.session_state[field_key] = value
 
 
 def render_prefill_controls(field_key: str, label: str, prompt_type: str) -> None:
@@ -94,11 +150,18 @@ prompt_type = st.selectbox(
     help="Wähle zuerst den Prompt-Typ. Danach werden nur relevante Felder angezeigt.",
 )
 
-persona_name = st.selectbox(
-    "Persona auswählen",
-    options=["tutor", "engineer", "tester"],
+start_key = st.selectbox(
+    "Startpunkt wählen",
+    options=list(START_POINTS.keys()),
+    format_func=lambda key: START_POINTS[key]["label"],
+    help="Ein Startpunkt befüllt passende Felder als intelligente Voreinstellung.",
 )
 
+if st.button("Startpunkt anwenden"):
+    apply_start_point(start_key, prompt_type.lower())
+    st.rerun()
+
+persona_name = START_POINTS[start_key]["persona"]
 target_options = get_target_options(persona_name)
 
 target_key = st.selectbox(
@@ -107,14 +170,18 @@ target_key = st.selectbox(
     format_func=lambda key: target_options[key],
 )
 
+st.caption(
+    "Alle vorausgefüllten Werte sind editierbar. Der Startpunkt ist ein Default, keine zusätzliche Persona-Auswahl."
+)
+
 if prompt_type == "LLM":
     st.subheader("LLM-Felder")
 
-    render_prefill_controls("llm_role", "Rolle / Persona", "llm")
+    render_prefill_controls("llm_role", "Rolle", "llm")
     st.text_input(
-        "Rolle / Persona",
+        "Rolle",
         key="llm_role",
-        placeholder="z. B. Senior Python Tutor mit Fokus auf didaktische Klarheit",
+        placeholder="z. B. Präziser Software Engineer",
         help="Welche Perspektive oder Expertise soll das Modell einnehmen?",
     )
 
@@ -122,8 +189,8 @@ if prompt_type == "LLM":
     st.text_area(
         "Kontext",
         key="llm_context",
-        placeholder="z. B. Lern-App für Erstsemester, begrenzte Zeit, vorhandenes Vorwissen ...",
-        help="Welche Hintergrundinformationen braucht das Modell?",
+        placeholder="z. B. für Studierende mit Grundkenntnissen",
+        help="Kurzer Rahmen: Zielgruppe, Umgebung, relevante Randbedingungen.",
         height=110,
     )
 
@@ -131,14 +198,14 @@ if prompt_type == "LLM":
         "Aufgabe",
         key="llm_task",
         placeholder="z. B. Erkläre Rekursion mit einem einfachen Python-Beispiel",
-        help="Was soll konkret erledigt oder erklärt werden?",
+        help="Die zentrale Aufgabe möglichst konkret formulieren.",
         height=110,
     )
     st.text_area(
         "Anforderungen",
         key="llm_requirements",
-        placeholder="z. B. deutsch, prägnant, fachlich korrekt, mit 3 Bullet-Points",
-        help="Welche fachlichen, sprachlichen oder technischen Bedingungen gelten?",
+        placeholder="z. B. fachlich korrekt, klar strukturiert, kurze Sätze",
+        help="Qualitäts- oder Stilkriterien, die explizit eingehalten werden sollen.",
         height=110,
     )
 
@@ -146,53 +213,39 @@ if prompt_type == "LLM":
     st.text_input(
         "Output-Format",
         key="llm_output_format",
-        placeholder="z. B. Markdown mit H2-Überschriften und Tabelle",
-        help="Wie soll die Antwort strukturiert sein?",
+        placeholder="z. B. Definition, Beispiel, Erklärung",
+        help="Wie die Antwort sichtbar strukturiert sein soll.",
     )
-
-    st.text_area(
-        "Optional: Beispiele",
-        key="llm_examples",
-        placeholder="Beispiel-Eingabe oder Beispiel-Ausgabe",
-        help="Optional: Zeige ein Beispiel für gewünschte Ein- oder Ausgabe",
-        height=100,
-    )
-
-    st.info(
-        "Automatische Vorausfüllung ist bewusst nur für strukturierende Felder aktiv. "
-        "Fachliche Anforderungen und projektspezifische Inhalte bleiben manuell beim Nutzer."
-    )
-
 else:
     st.subheader("Agent-Felder")
     st.text_area(
         "Ziel",
         key="agent_goal",
-        placeholder="z. B. Ersetze die alte Prompt-Maske durch eine typabhängige Feldlogik",
-        help="Welche konkrete Änderung oder welches Ergebnis soll erreicht werden?",
+        placeholder="z. B. Vereinfachte Prompt-UI mit Startpunkten statt Persona-Feld",
+        help="Konkretes Ergebnis, das der Agent erreichen soll.",
         height=100,
     )
     st.text_area(
         "Kontext",
         key="agent_context",
-        placeholder="z. B. Dateien src/app.py und src/prompt_generator.py, bestehende Streamlit-UI ...",
-        help="Welche Dateien, UI-Bereiche, bestehenden Komponenten oder Annahmen sind relevant?",
+        placeholder="z. B. Streamlit-UI in src/app.py, bestehende Prompt-Logik beibehalten",
+        help="Relevante Dateien, Rahmenbedingungen und Annahmen.",
         height=110,
     )
     st.text_area(
         "Constraints",
         key="agent_constraints",
-        placeholder="z. B. kein Backend-Umbau, kein neues Framework, nur minimale UI-Änderung",
-        help="Welche Technologien, Architekturregeln oder Verbote gelten?",
+        placeholder="z. B. keine Backend-Änderung, keine neuen Features",
+        help="Was darf nicht geändert werden oder ist fest vorgegeben?",
         height=100,
     )
 
-    render_prefill_controls("agent_workflow", "Arbeitsweise / Schritte", "agent")
+    render_prefill_controls("agent_workflow", "Arbeitsweise", "agent")
     st.text_area(
-        "Arbeitsweise / Schritte",
+        "Arbeitsweise",
         key="agent_workflow",
         placeholder="1) analysieren 2) planen 3) umsetzen 4) prüfen",
-        help="Wie soll der Agent vorgehen? Erst analysieren, dann planen, dann umsetzen?",
+        help="Vorgehensmodell mit klaren Schritten.",
         height=110,
     )
 
@@ -201,25 +254,13 @@ else:
         "Verifikation",
         key="agent_verification",
         placeholder="z. B. pytest, UI-Check, manuelle Smoke-Tests",
-        help="Wie prüft der Agent, dass die Änderung wirklich funktioniert?",
+        help="Wie wird überprüft, dass das Ziel erreicht wurde?",
         height=100,
-    )
-    st.text_area(
-        "Done-When / Abschlusskriterium",
-        key="agent_done_when",
-        placeholder="z. B. alle Tests grün, Felder dynamisch sichtbar, Vorschau und Qualitätscheck korrekt",
-        help="Woran erkennt man, dass die Aufgabe abgeschlossen ist?",
-        height=100,
-    )
-
-    st.info(
-        "Vorausfüllung fokussiert auf wiederverwendbare Best Practices (Arbeitsweise, Verifikation). "
-        "Ziel, produktspezifische Entscheidungen und Fachinhalte werden nicht automatisch ersetzt."
     )
 
 filename = st.text_input(
     "Dateiname für den generierten Prompt",
-    value=f"{persona_name}_{target_key}_{prompt_type.lower()}_prompt_v1.md",
+    value=f"{start_key}_{target_key}_{prompt_type.lower()}_prompt_v1.md",
 )
 
 quality_request = PromptRequest(
@@ -231,13 +272,11 @@ quality_request = PromptRequest(
     llm_task=st.session_state.get("llm_task", "").strip(),
     llm_requirements=st.session_state.get("llm_requirements", "").strip(),
     llm_output_format=st.session_state.get("llm_output_format", "").strip(),
-    llm_examples=st.session_state.get("llm_examples", "").strip(),
     agent_goal=st.session_state.get("agent_goal", "").strip(),
     agent_context=st.session_state.get("agent_context", "").strip(),
     agent_constraints=st.session_state.get("agent_constraints", "").strip(),
     agent_workflow=st.session_state.get("agent_workflow", "").strip(),
     agent_verification=st.session_state.get("agent_verification", "").strip(),
-    agent_done_when=st.session_state.get("agent_done_when", "").strip(),
 )
 
 quality_result = evaluate_prompt_quality(quality_request)
@@ -252,65 +291,36 @@ st.subheader("Live-Vorschau")
 preview_prompt = build_prompt(quality_request)
 st.code(preview_prompt, language="markdown")
 
-with st.expander("Feldlogik + Qualitätsregeln"):
+with st.expander("Feldlogik (reduziert)"):
     st.markdown(
         """
-**Sichtbare Felder pro Modus**
-- **LLM:** Rolle/Persona, Kontext, Aufgabe, Anforderungen, Output-Format, optional Beispiele
-- **Agent:** Ziel, Kontext, Constraints, Arbeitsweise/Schritte, Verifikation, Done-When
+**LLM:** Rolle, Kontext, Aufgabe, Anforderungen, Output-Format
 
-**Vorausfüllung aktiv für (minimaler Start):**
-- **LLM:** Rolle/Persona, Kontext, Output-Format
-- **Agent:** Arbeitsweise, Verifikation
+**Agent:** Ziel, Kontext, Constraints, Arbeitsweise, Verifikation
 
-**Bewusst ohne Auto-Vorausfüllung:**
-- **LLM:** Anforderungen, konkrete Fachinhalte
-- **Agent:** Ziel, projektspezifische Anforderungen, individuelle Produktentscheidungen
+**Startpunkt-Logik:**
+- *Leer starten*: keine Vorausfüllung
+- *Tutor / Engineer / Tester*: befüllen mehrere Felder als editierbare Defaults
 
-**Qualitätswarnungen (LLM)**
-- Warnung bei fehlender Aufgabe
-- Warnung bei zu knappem Kontext
-- Hinweis bei fehlendem Output-Format
-- Hinweis bei zu allgemeinen Anforderungen
-
-**Qualitätswarnungen (Agent)**
-- Fehler bei zu vagem Ziel
-- Warnung ohne Constraints
-- Fehler ohne Arbeitsweise
-- Fehler ohne Verifikation
-- Warnung ohne Done-When
+**Vorlagen-Logik:**
+- Vorlagen bleiben erhalten, wirken aber nur auf einzelne Felder.
         """
     )
 
-with st.expander("Beispiele: Vorher / Nachher"):
+with st.expander("Beispiel: Vorher / Nachher UI"):
     st.markdown(
         """
-**LLM – Vorher (manuell, ohne Baustein):**
-```text
-Bitte erkläre Rekursion.
-```
-**LLM – Nachher (mit strukturierender Vorausfüllung):**
-```text
-Rolle: Didaktisch starker Tutor für Informatik-Studierende
-Kontext: Erkläre auf Bachelor-Niveau mit klarer Struktur.
-Aufgabe: Erkläre Rekursion mit einem einfachen Python-Beispiel
-Anforderungen: klare Sprache, 3 Kernpunkte, häufige Fehler nennen
-Output-Format: Antwort in 3 Abschnitten: Definition, Beispiel, Fallstricke.
-```
+**Vorher:**
+- Persona auswählen
+- Vorlage wählen
+- zusätzliche optionale Felder (z. B. Beispiele, Done-When)
 
-**Agent – Vorher (vage):**
-```text
-Mach das Frontend besser.
-```
-**Agent – Nachher (mit Baustein + Übernahme aus früherem Prompt):**
-```text
-Ziel: Prompt-Typ nach oben verschieben und Felder dynamisch nach LLM/Agent anzeigen
-Kontext: Streamlit-UI in src/app.py, Promptaufbau in src/prompt_generator.py
-Constraints: kein Backend-Umbau, keine Persistenz, minimal-invasive UI-Anpassung
-Arbeitsweise: Zuerst analysieren, dann planen, dann minimal umsetzen.
-Verifikation: Zeige vorher/nachher Verhalten.
-Done-When: Beide Modi zeigen nur relevante Felder, Vorschau und Quality-Check passen
-```
+**Nachher:**
+- Prompt-Typ
+- Startpunkt wählen
+- reduzierte Kernfelder je Modus
+- feldbezogene Vorlagen
+- Live-Vorschau + Qualitätsfeedback
         """
     )
 
