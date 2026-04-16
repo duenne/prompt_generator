@@ -3,6 +3,7 @@ import streamlit as st
 from prompt_generator import (
     PromptRequest,
     build_prompt,
+    evaluate_prompt_quality,
     get_target_options,
     save_generated_prompt,
 )
@@ -50,16 +51,22 @@ filename = st.text_input(
     value=f"{persona_name}_{target_key}_prompt_v1.md",
 )
 
-if st.button("Prompt generieren"):
-    request = PromptRequest(
-        persona_name=persona_name,
-        target_key=target_key,
-        goal=goal.strip(),
-        requirements=requirements.strip(),
-        scenario=scenario.strip(),
-    )
+quality_request = PromptRequest(
+    persona_name=persona_name,
+    target_key=target_key,
+    goal=goal.strip(),
+    requirements=requirements.strip(),
+    scenario=scenario.strip(),
+)
+quality_result = evaluate_prompt_quality(quality_request)
+st.subheader("Qualitätscheck (live)")
+st.progress(quality_result.score / quality_result.max_score)
+st.caption(f"Qualitätsscore: {quality_result.score}/{quality_result.max_score}")
+for item in quality_result.feedback:
+    st.write(item)
 
-    prompt_text = build_prompt(request)
+if st.button("Prompt generieren"):
+    prompt_text = build_prompt(quality_request)
     output_path = save_generated_prompt(prompt_text, filename)
 
     st.subheader("Generierter Prompt")

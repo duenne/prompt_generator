@@ -16,6 +16,13 @@ class PromptRequest:
     scenario: str
 
 
+@dataclass
+class QualityCheckResult:
+    score: int
+    max_score: int
+    feedback: list[str]
+
+
 TARGET_LABELS = {
     "tutor": {
         "explain_concept": "Explain concept",
@@ -111,6 +118,40 @@ def build_prompt(request: PromptRequest) -> str:
     ]
 
     return "\n\n".join(section.strip() for section in sections if section and section.strip())
+
+
+def evaluate_prompt_quality(request: PromptRequest) -> QualityCheckResult:
+    feedback: list[str] = []
+    score = 0
+    max_score = 4
+
+    if len(request.goal.strip()) >= 20:
+        score += 1
+        feedback.append("✅ Ziel ist konkret genug beschrieben.")
+    else:
+        feedback.append("⚠️ Ziel ist noch unklar. Beschreibe den gewünschten Output konkreter.")
+
+    requirement_text = request.requirements.strip()
+    if requirement_text:
+        score += 1
+        feedback.append("✅ Anforderungen sind vorhanden.")
+    else:
+        feedback.append("⚠️ Anforderungen fehlen. Nenne z. B. Ton, Tiefe oder technische Grenzen.")
+
+    format_keywords = ["format", "json", "markdown", "liste", "tabelle", "struktur"]
+    if any(keyword in requirement_text.lower() for keyword in format_keywords):
+        score += 1
+        feedback.append("✅ Output-Format ist angedeutet.")
+    else:
+        feedback.append("⚠️ Kein klares Output-Format erkannt (z. B. 'als Markdown-Liste').")
+
+    if len(request.scenario.strip()) >= 20:
+        score += 1
+        feedback.append("✅ Szenario gibt dem Modell hilfreichen Kontext.")
+    else:
+        feedback.append("⚠️ Szenario ist sehr knapp. Ergänze Zielgruppe oder Nutzungskontext.")
+
+    return QualityCheckResult(score=score, max_score=max_score, feedback=feedback)
 
 
 def save_generated_prompt(prompt_text: str, filename: str) -> Path:
