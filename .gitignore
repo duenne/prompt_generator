@@ -6,3 +6,4 @@ __pycache__/
 generated_prompts/
 prompt_generator_repo.egg-info/
 generated_prompts/*.tmp
+.env

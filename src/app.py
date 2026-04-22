@@ -1,4 +1,8 @@
+import os
+
 import streamlit as st
+from dotenv import find_dotenv, load_dotenv
+from supabase import create_client
 
 from prefill_support import get_field_templates, load_prompt_history
 from prompt_generator import (
@@ -10,9 +14,223 @@ from prompt_generator import (
 )
 
 
+load_dotenv(find_dotenv())
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+supabase = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception:
+        supabase = None
+
+
+def test_supabase_connection():
+    if not supabase:
+        return False, "Supabase-Client ist nicht initialisiert. Prüfe `.env`."
+    try:
+        response = supabase.table("prompts").select("id").limit(1).execute()
+        error = getattr(response, "error", None)
+        if error:
+            error_message = getattr(error, "message", str(error))
+            if getattr(error, "code", "") == "PGRST205" or "Could not find the table" in error_message:
+                return False, (
+                    "Die Tabelle `prompts` existiert nicht. "
+                    "Lege sie zuerst an oder benutze `DATABASE_URL` und dann die Funktion 'Tabellen automatisch anlegen'."
+                )
+            return False, error_message
+        return True, "Supabase-Verbindung funktioniert."
+    except Exception as exc:
+        return False, str(exc)
+
+
+def create_tables():
+    if not DATABASE_URL:
+        return False, "DATABASE_URL ist nicht gesetzt. Lege sie in `.env` an, wenn du Tabellen automatisch erstellen möchtest."
+    try:
+        import psycopg2
+    except ImportError:
+        return False, "Bitte installiere `psycopg2-binary` für automatische Tabellenerstellung."
+
+    ddl = '''CREATE TABLE IF NOT EXISTS prompts (
+    id serial PRIMARY KEY,
+    title text NOT NULL,
+    prompt text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS prompt_versions (
+    id serial PRIMARY KEY,
+    prompt_id integer NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+    prompt text NOT NULL,
+    version_note text,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+'''
+    try:
+        with psycopg2.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cur:
+                cur.execute(ddl)
+        return True, "Tabellen `prompts` und `prompt_versions` wurden angelegt."
+    except Exception as exc:
+        return False, str(exc)
+
+
+def save_prompt(title: str, prompt_text: str) -> tuple[bool, str]:
+    if not supabase:
+        return False, "Supabase-Client ist nicht initialisiert. Prüfe `.env`."
+
+    if not title.strip() or not prompt_text.strip():
+        return False, "Titel und Prompt dürfen nicht leer sein."
+
+    insert_response = supabase.table("prompts").insert(
+        {"title": title.strip(), "prompt": prompt_text.strip()}
+    ).execute()
+    error = getattr(insert_response, "error", None)
+    if error:
+        return False, getattr(error, "message", str(error))
+
+    if not insert_response.data:
+        return False, "Keine Prompt-ID nach dem Einfügen erhalten."
+
+    prompt_id = insert_response.data[0].get("id")
+    if not prompt_id:
+        return False, "Prompt-ID konnte nicht ermittelt werden."
+
+    version_response = supabase.table("prompt_versions").insert(
+        {
+            "prompt_id": prompt_id,
+            "prompt": prompt_text.strip(),
+            "version_note": "Erste Version",
+        }
+    ).execute()
+    version_error = getattr(version_response, "error", None)
+    if version_error:
+        return False, getattr(version_error, "message", str(version_error))
+
+    return True, "Prompt erfolgreich gespeichert."
+
+
+def list_prompts() -> list[dict]:
+    if not supabase:
+        return []
+
+    response = supabase.table("prompts").select("*").order("id", desc=False).execute()
+    error = getattr(response, "error", None)
+    if error:
+        return []
+
+    return response.data or []
+
 st.set_page_config(page_title="Prompt-Generator", layout="centered")
 
 st.title("Prompt-Generator")
+
+page = st.sidebar.selectbox(
+    "Seite",
+    ["Prompt-Generator", "Prompt speichern", "DB-Verbindung testen"],
+)
+
+if page == "DB-Verbindung testen":
+    st.subheader("Supabase DB-Test")
+    st.write("Teste die Supabase-Verbindung und lege bei Bedarf die Tabellen an.")
+    st.markdown(
+        "- `SUPABASE_URL` aus dem Projekt URL\n"
+        "- `SUPABASE_SERVICE_ROLE_KEY` aus den Supabase-API-Schlüsseln\n"
+        "- `DATABASE_URL` nur für automatische Tabellenerstellung\n"
+    )
+
+    st.write(f"- SUPABASE_URL gesetzt: {'✅' if SUPABASE_URL else '❌'}")
+    st.write(f"- SUPABASE_SERVICE_ROLE_KEY gesetzt: {'✅' if SUPABASE_KEY else '❌'}")
+    st.write(f"- DATABASE_URL gesetzt: {'✅' if DATABASE_URL else '❌'}")
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        st.error("Bitte setze SUPABASE_URL und SUPABASE_SERVICE_ROLE_KEY in `.env`.")
+    if st.button("Supabase-Verbindung prüfen"):
+        success, message = test_supabase_connection()
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+    st.markdown("---")
+    st.subheader("Tabellen anlegen")
+    if DATABASE_URL:
+        if st.button("Tabellen automatisch anlegen"):
+            success, message = create_tables()
+            if success:
+                st.success(message)
+            else:
+                st.error(message)
+    else:
+        st.info(
+            "Lege `DATABASE_URL` in `.env` an, wenn du Tabellen automatisch erstellen möchtest."
+        )
+
+    st.code(
+        """CREATE TABLE IF NOT EXISTS prompts (
+  id serial PRIMARY KEY,
+  title text NOT NULL,
+  prompt text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS prompt_versions (
+  id serial PRIMARY KEY,
+  prompt_id integer NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  prompt text NOT NULL,
+  version_note text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+""",
+        language="sql",
+    )
+    st.stop()
+
+if page == "Prompt speichern":
+    st.subheader("Prompt speichern")
+    st.write("Speichere einen Prompt in Supabase und lege automatisch die erste Version an.")
+
+    title = st.text_input("Titel", value=st.session_state.get("save_title", ""), key="save_title")
+    prompt_text = st.text_area(
+        "Prompt", value=st.session_state.get("save_prompt_text", ""), height=180, key="save_prompt_text"
+    )
+
+    if st.button("Speichern", key="save_prompt_button"):
+        success, message = save_prompt(title, prompt_text)
+        st.session_state["save_message"] = message
+        st.session_state["save_success"] = success
+        if success:
+            st.session_state["save_title"] = ""
+            st.session_state["save_prompt_text"] = ""
+            st.experimental_rerun()
+
+    if st.session_state.get("save_message"):
+        if st.session_state.get("save_success"):
+            st.success(st.session_state["save_message"])
+        else:
+            st.error(st.session_state["save_message"])
+
+    st.markdown("---")
+    st.subheader("Gespeicherte Prompts")
+    saved = list_prompts()
+    if not saved:
+        st.info("Keine gespeicherten Prompts gefunden.")
+    else:
+        for prompt_item in saved:
+            st.write(f"**{prompt_item.get('title', 'Ohne Titel')}**")
+            st.write(prompt_item.get("prompt", ""))
+            st.write("---")
+
+    if st.session_state.get("save_success"):
+        st.session_state.pop("save_success", None)
+    st.session_state.pop("save_message", None)
+
+    st.stop()
+
 st.write("Reduzierte, klare UI mit Startpunkten und Live-Qualitätsfeedback.")
 
 FIELD_SEPARATOR = {
