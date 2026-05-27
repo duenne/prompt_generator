@@ -111,6 +111,28 @@ def parse_coverage_xml(path: Path = COVERAGE_PATH) -> dict:
     return {"available": True, "message": "", "total": total_coverage, "modules": modules}
 
 
+def _humanize_test_identifier(identifier: str) -> str:
+    cleaned = identifier.strip().replace("test_", "", 1)
+    parts = [part for part in cleaned.split("_") if part]
+    if not parts:
+        return "keinen klaren Fachfall"
+    return " ".join(parts)
+
+
+def build_test_explanation(testcase: dict) -> str:
+    classname = testcase.get("classname", "")
+    test_name = testcase.get("name", "")
+
+    module_hint = classname.split(".")[-1] if classname else "unbekanntes Modul"
+    scenario_hint = _humanize_test_identifier(test_name)
+
+    return (
+        f"Dieser Test prüft im Modul `{module_hint}`, ob der Fachfall `{scenario_hint}` "
+        "korrekt umgesetzt ist. Ziel ist es, die fachliche Erwartung sichtbar zu machen "
+        "und nicht nur den Ausführungsstatus (pass/fail) zu betrachten."
+    )
+
+
 def _get_git_info() -> tuple[str | None, str | None]:
     try:
         branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
@@ -220,6 +242,33 @@ def render_test_dashboard() -> None:
     with tabs[1]:
         if junit_data["testcases"]:
             st.dataframe(junit_data["testcases"], use_container_width=True)
+
+            st.markdown("#### Testverständnis")
+            st.caption(
+                "Optional: Zeigt pro Test eine kurze, menschenlesbare Einordnung, "
+                "damit klar wird, was inhaltlich abgesichert wird."
+            )
+
+            show_explanations = st.toggle("Erklärungen zu Tests anzeigen", value=False)
+            if show_explanations:
+                status_options = ["alle", "failed", "error", "skipped", "passed"]
+                selected_status = st.selectbox(
+                    "Erklärungen filtern nach Status",
+                    status_options,
+                    index=0,
+                )
+
+                visible_cases = junit_data["testcases"]
+                if selected_status != "alle":
+                    visible_cases = [case for case in visible_cases if case.get("status") == selected_status]
+
+                if not visible_cases:
+                    st.info("Keine Tests für den gewählten Status vorhanden.")
+                else:
+                    for case in visible_cases:
+                        title = f"{case.get('name', 'Unbenannter Test')} · {case.get('status', 'unknown')}"
+                        with st.expander(title):
+                            st.write(build_test_explanation(case))
         else:
             st.info("Keine Einzeltests verfügbar.")
 
