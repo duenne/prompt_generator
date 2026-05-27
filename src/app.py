@@ -12,6 +12,9 @@ from prompt_generator import (
     get_target_options,
     save_generated_prompt,
 )
+from test_dashboard import render_test_dashboard
+
+
 
 
 load_dotenv(find_dotenv())
@@ -131,7 +134,7 @@ st.title("Prompt-Generator")
 
 page = st.sidebar.selectbox(
     "Seite",
-    ["Prompt-Generator", "Prompt speichern", "DB-Verbindung testen"],
+    ["Prompt-Generator", "Prompt speichern", "DB-Verbindung testen", "Tests"],
 )
 
 if page == "DB-Verbindung testen":
@@ -188,6 +191,10 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
 """,
         language="sql",
     )
+    st.stop()
+
+if page == "Tests":
+    render_test_dashboard()
     st.stop()
 
 if page == "Prompt speichern":
