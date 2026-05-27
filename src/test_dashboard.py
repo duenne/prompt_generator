@@ -9,7 +9,8 @@ import xml.etree.ElementTree as ET
 
 import streamlit as st
 
-TEST_RESULTS_DIR = Path("test_results")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+TEST_RESULTS_DIR = PROJECT_ROOT / "test_results"
 JUNIT_PATH = TEST_RESULTS_DIR / "latest_junit.xml"
 COVERAGE_PATH = TEST_RESULTS_DIR / "latest_coverage.xml"
 META_PATH = TEST_RESULTS_DIR / "latest_meta.json"
