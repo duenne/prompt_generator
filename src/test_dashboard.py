@@ -151,10 +151,17 @@ def run_local_tests() -> tuple[int, str]:
     return process.returncode, process.stdout + "\n" + process.stderr
 
 
-def render_test_dashboard() -> None:
-    st.title("Test-Dashboard")
 
-    if os.getenv("ENABLE_LOCAL_TEST_RUNNER", "").lower() == "true":
+
+def is_local_test_runner_enabled() -> bool:
+    return os.getenv("ENABLE_LOCAL_TEST_RUNNER", "").strip().lower() == "true"
+
+
+def render_runner_section() -> None:
+    st.markdown("### Lokaler Test-Runner")
+    st.caption(f"Artefakt-Ordner: `{TEST_RESULTS_DIR}`")
+
+    if is_local_test_runner_enabled():
         if st.button("Tests lokal ausführen"):
             with st.spinner("Führe Tests aus..."):
                 returncode, output = run_local_tests()
@@ -163,6 +170,21 @@ def render_test_dashboard() -> None:
             else:
                 st.warning(f"Testlauf beendet mit Exit-Code {returncode}.")
             st.code(output)
+        return
+
+    st.info(
+        "Der lokale Test-Runner ist deaktiviert. Setze `ENABLE_LOCAL_TEST_RUNNER=true`, "
+        "dann erscheint der Button `Tests lokal ausführen`."
+    )
+    st.code(
+        "ENABLE_LOCAL_TEST_RUNNER=true streamlit run src/app.py",
+        language="bash",
+    )
+
+def render_test_dashboard() -> None:
+    st.title("Test-Dashboard")
+
+    render_runner_section()
 
     junit_data = parse_junit_xml()
     coverage_data = parse_coverage_xml()
@@ -174,6 +196,7 @@ def render_test_dashboard() -> None:
         if not junit_data["available"]:
             st.info("Noch kein Testlauf vorhanden")
             st.warning(junit_data["message"])
+            st.caption("Hinweis: `pytest -q` alleine erzeugt keine Dashboard-Artefakte. Nutze den Runner-Button oder den angegebenen Kommandozeilenbefehl mit --junitxml/--cov.")
         summary = junit_data.get("summary", {})
 
         col1, col2, col3 = st.columns(3)
