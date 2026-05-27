@@ -124,3 +124,25 @@ def test_evaluate_agent_prompt_quality_detects_missing_fields() -> None:
     assert any("Keine Constraints" in item for item in result.feedback)
     assert any("Keine Arbeitsweise" in item for item in result.feedback)
     assert any("Keine Verifikation" in item for item in result.feedback)
+
+
+import pytest
+from prompt_generator import load_persona, load_task_template
+
+
+def test_get_target_options_raises_for_unknown_persona() -> None:
+    with pytest.raises(ValueError, match="Unbekannte Persona"):
+        get_target_options("unknown")
+
+
+def test_load_persona_raises_for_unknown_persona() -> None:
+    with pytest.raises(ValueError, match="Unbekannte Persona"):
+        load_persona("unknown")
+
+
+def test_load_task_template_raises_for_unknown_persona_and_target() -> None:
+    with pytest.raises(ValueError, match="Keine Task-Datei"):
+        load_task_template("unknown", "any")
+
+    with pytest.raises(ValueError, match="Unbekanntes Ziel"):
+        load_task_template("engineer", "unknown_target")
