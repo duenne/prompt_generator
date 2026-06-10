@@ -36,6 +36,13 @@ class QualityCheckResult:
     suggestion: str
 
 
+@dataclass
+class DeterministicQualityResult:
+    score: int
+    missing_or_weak_elements: list[str]
+    recommendation: str
+
+
 TARGET_LABELS = {
     "tutor": {
         "explain_concept": "Explain concept",
@@ -139,6 +146,23 @@ def evaluate_prompt_quality(request: PromptRequest) -> QualityCheckResult:
     return _evaluate_llm_prompt_quality(request)
 
 
+def evaluate_prompt_quality_deterministic(
+    request: PromptRequest,
+) -> DeterministicQualityResult:
+    normalized_prompt_type = request.prompt_type.lower().strip()
+    if normalized_prompt_type == "agent":
+        missing_or_weak_elements = _collect_agent_quality_gaps(request)
+    else:
+        missing_or_weak_elements = _collect_llm_quality_gaps(request)
+
+    score = max(0, 100 - len(missing_or_weak_elements) * 25)
+    return DeterministicQualityResult(
+        score=score,
+        missing_or_weak_elements=missing_or_weak_elements,
+        recommendation=_quality_recommendation(missing_or_weak_elements),
+    )
+
+
 def save_generated_prompt(prompt_text: str, filename: str) -> Path:
     GENERATED_PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = GENERATED_PROMPTS_DIR / filename
@@ -158,6 +182,19 @@ def _build_llm_request_block(request: PromptRequest, target_label: str) -> str:
     output_format = request.llm_output_format.strip() or _extract_output_format(requirements)
 
     sections = [
+        "## Role / Working Mode",
+        role,
+        "## Task Goal",
+        task,
+        "## Context",
+        context,
+        "## Constraints",
+        requirements,
+        "## Expected Output Format",
+        output_format,
+        "## Quality Checklist",
+        *_build_llm_quality_checklist(task, context, output_format),
+        "",
         "Prompt-Typ: LLM (einmalige Antwort)",
         "Rolle:",
         role,
@@ -193,6 +230,19 @@ def _build_agent_request_block(request: PromptRequest, target_label: str) -> str
     verification = request.agent_verification.strip() or "Keine Verifikation definiert."
 
     sections = [
+        "## Role / Working Mode",
+        f"Agent working mode: {request.persona_name} / {target_label}",
+        "## Task Goal",
+        goal,
+        "## Context",
+        context,
+        "## Constraints",
+        constraints,
+        "## Expected Output Format",
+        "Plan, actions, verification, risks.",
+        "## Quality Checklist",
+        *_build_agent_quality_checklist(goal, constraints, workflow, verification),
+        "",
         "Prompt-Typ: Agent (iterativer Arbeitsprozess)",
         "Ziel:",
         goal,
@@ -207,6 +257,113 @@ def _build_agent_request_block(request: PromptRequest, target_label: str) -> str
         "Meta-Regel: Trenne Planung und Umsetzung explizit und dokumentiere jede Iteration nachvollziehbar.",
     ]
     return "\n".join(sections)
+
+
+def _build_llm_quality_checklist(
+    task: str,
+    context: str,
+    output_format: str,
+) -> list[str]:
+    checklist = []
+    if task and task != "Nicht angegeben.":
+        checklist.append("- Task goal is specific.")
+    else:
+        checklist.append("- Add a concrete task goal.")
+
+    if len(context) >= 30:
+        checklist.append("- Context is concrete enough.")
+    else:
+        checklist.append("- Add concrete context.")
+
+    if output_format:
+        checklist.append("- Expected output format is defined.")
+    else:
+        checklist.append("- Define the expected output format.")
+
+    return checklist
+
+
+def _build_agent_quality_checklist(
+    goal: str,
+    constraints: str,
+    workflow: str,
+    verification: str,
+) -> list[str]:
+    checklist = []
+    if goal and not _is_vague_goal(goal):
+        checklist.append("- Task goal is specific.")
+    else:
+        checklist.append("- Add a concrete task goal.")
+
+    if constraints and constraints != "Keine Constraints angegeben.":
+        checklist.append("- Constraints are defined.")
+    else:
+        checklist.append("- Add explicit constraints.")
+
+    if workflow:
+        checklist.append("- Working process is defined.")
+    else:
+        checklist.append("- Define the working process.")
+
+    if verification and verification != "Keine Verifikation definiert.":
+        checklist.append("- Verification path is defined.")
+    else:
+        checklist.append("- Define the verification path.")
+
+    return checklist
+
+
+def _collect_llm_quality_gaps(request: PromptRequest) -> list[str]:
+    gaps = []
+    task = request.llm_task.strip() or request.goal.strip()
+    context = request.llm_context.strip() or request.scenario.strip()
+    constraints = request.llm_requirements.strip() or request.requirements.strip()
+    output_format = request.llm_output_format.strip()
+
+    if not task:
+        gaps.append("task goal")
+    if len(context) < 30:
+        gaps.append("context")
+    if not constraints or _is_general_requirement_text(constraints):
+        gaps.append("constraints")
+    if not output_format:
+        gaps.append("expected output format")
+
+    return gaps
+
+
+def _collect_agent_quality_gaps(request: PromptRequest) -> list[str]:
+    gaps = []
+    goal = request.agent_goal.strip() or request.goal.strip()
+    context = request.agent_context.strip() or request.scenario.strip()
+    constraints = request.agent_constraints.strip() or request.requirements.strip()
+    workflow = request.agent_workflow.strip()
+    verification = request.agent_verification.strip()
+
+    if not goal or _is_vague_goal(goal):
+        gaps.append("task goal")
+    if len(context) < 30:
+        gaps.append("context")
+    if not constraints:
+        gaps.append("constraints")
+    if not workflow or not verification:
+        gaps.append("expected output format")
+
+    return gaps
+
+
+def _quality_recommendation(missing_or_weak_elements: list[str]) -> str:
+    if not missing_or_weak_elements:
+        return "Der Prompt ist ausreichend konkret und gut strukturiert."
+
+    first_gap = missing_or_weak_elements[0]
+    recommendations = {
+        "task goal": "Ergaenze zuerst eine konkrete Aufgabe.",
+        "context": "Ergaenze Kontext zu Zielgruppe, Einsatzort oder Randbedingungen.",
+        "constraints": "Ergaenze konkrete Constraints oder Qualitaetskriterien.",
+        "expected output format": "Definiere das erwartete Ausgabeformat.",
+    }
+    return recommendations[first_gap]
 
 
 def _derive_agent_workflow(goal: str, target_label: str) -> str:
