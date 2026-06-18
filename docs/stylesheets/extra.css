@@ -1,0 +1,18 @@
+:root {
+  --md-primary-fg-color: #1f4f6b;
+  --md-accent-fg-color: #8b5e34;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: 0;
+}
+
+.md-typeset table:not([class]) {
+  font-size: 0.95rem;
+}
+
+.md-typeset code {
+  border-radius: 4px;
+}

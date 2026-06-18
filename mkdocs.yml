@@ -1,0 +1,60 @@
+site_name: Prompt Generator Repository
+site_description: Projektwebseite zum Lernziel "Prompts als Code" auf Basis des bestehenden Repositories.
+site_author: "TODO: fachlich klären"
+repo_url: https://github.com/duenne/prompt_generator.git
+
+theme:
+  name: material
+  language: de
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - toc.follow
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+nav:
+  - Startseite: index.md
+  - Problem und Motivation: problem.md
+  - Lösung und Value Proposition: solution.md
+  - Demo und Screenshots: demo.md
+  - Zielgruppen und Personas: personas.md
+  - Nutzungsszenarien: scenarios.md
+  - Funktionsumfang: features.md
+  - Architektur: architecture.md
+  - Datenmodell: data-model.md
+  - Schnittstellen: interfaces.md
+  - Setup: setup.md
+  - Deployment: deployment.md
+  - Testing: testing.md
+  - Technologiestack: tech-stack.md
+  - KI-Einsatz:
+      - Überblick: ai-usage.md
+      - Token-Nutzungsstatistik: ai/token-usage-summary.md
+  - Beitrag für Bewerbungen: application-reference.md
+  - Entwicklerdokumentation: developer-guide.md
+  - Lessons Learned: lessons-learned.md
+  - Roadmap: roadmap.md
+  - Bestehende Projektdokumente:
+      - Projektstatus: CHECKPOINT_PROJEKT_STATUS.md
+      - Architekturentscheidungen: DECISIONS_ADR.md
+      - Known Issues: KNOWN_ISSUES.md
+      - Prompt Evaluation Log: prompt_eval_log.md
+      - PR-Template: pull_request_template.md

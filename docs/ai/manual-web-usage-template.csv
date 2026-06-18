@@ -1,0 +1,4 @@
+date,tool,interface,task,model,input_tokens,output_tokens,total_tokens,source_of_numbers,estimated,notes
+2026-06-18,ChatGPT,web,Tutorial und MkDocs-Prompts,TODO,TODO,TODO,TODO,manual estimate,true,TODO: aus Chatverlauf oder Account-Usage ergänzen
+2026-06-18,Codex,web,Repository-Dokumentation,TODO,TODO,TODO,TODO,manual estimate,true,TODO: aus Web-Interface oder manueller Schätzung ergänzen
+2026-06-18,Claude,web,Review der Dokumentation,TODO,TODO,TODO,TODO,manual estimate,true,TODO: aus Claude Usage oder manueller Schätzung ergänzen
